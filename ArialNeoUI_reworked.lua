@@ -1,3 +1,6 @@
+-- NewTimeUI
+-- Reworked UI library with Slider, Textbox, Toggle and Dropdown
+
 local UI = {}
 
 local Players = game:GetService("Players")
@@ -188,8 +191,8 @@ function UI:CreateWindow(options)
 	local opened = false
 	local animating = false
 
-	local windowName = options.Name or "ArialNeoUi"
-	local titleText = options.Title or "Arial Neo Ui test"
+	local windowName = options.Name or "NewTimeUI"
+	local titleText = options.Title or "New Time UI"
 	local iconImage = options.Icon or ""
 
 	local screenGui = create("ScreenGui", {
@@ -296,9 +299,10 @@ function UI:CreateWindow(options)
 		Size = UDim2.new(0, 104, 0, 258),
 		Position = UDim2.new(0, 14, 0, 58),
 		ScrollBarThickness = 0,
+		ScrollingEnabled = true,
 		BackgroundTransparency = 0.4,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
 		ZIndex = 3
 	})
 	addCorner(tabFrame, UDim.new(0, 5))
@@ -486,7 +490,7 @@ function UI:CreateWindow(options)
 			ScrollBarThickness = 0,
 			BackgroundTransparency = 0.4,
 			CanvasSize = UDim2.new(0, 0, 0, 0),
-			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			AutomaticCanvasSize = Enum.AutomaticSize.None,
 			Visible = false,
 			ZIndex = 3
 		})
@@ -503,7 +507,7 @@ function UI:CreateWindow(options)
 		local pageLayout = create("UIListLayout", {
 			Parent = pageFrame,
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, 6),
+			Padding = UDim.new(0, 8),
 			HorizontalAlignment = Enum.HorizontalAlignment.Center
 		})
 

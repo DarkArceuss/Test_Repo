@@ -1,4 +1,4 @@
--- NewTimeUI
+-- NewTimeUI v2
 -- Reworked UI library with Slider, Textbox, Toggle and Dropdown
 
 local UI = {}
@@ -120,7 +120,7 @@ local function callSafely(callback, ...)
 		task.spawn(function(...)
 			local ok, err = pcall(callback, ...)
 			if not ok then
-				warn("[ArialNeoUi] Callback error:", err)
+				warn("[NewTimeUI] Callback error:", err)
 			end
 		end, ...)
 	end
@@ -488,6 +488,9 @@ function UI:CreateWindow(options)
 			Size = UDim2.new(0, 446, 0, 258),
 			Position = UDim2.new(0, 0, 0, 0),
 			ScrollBarThickness = 0,
+			ScrollingEnabled = true,
+			Active = true,
+			ClipsDescendants = true,
 			BackgroundTransparency = 0.4,
 			CanvasSize = UDim2.new(0, 0, 0, 0),
 			AutomaticCanvasSize = Enum.AutomaticSize.None,
@@ -496,26 +499,46 @@ function UI:CreateWindow(options)
 		})
 		addCorner(pageFrame)
 
-		create("UIPadding", {
+		local content = create("Frame", {
+			Name = "Content",
 			Parent = pageFrame,
-			PaddingTop = UDim.new(0, 8),
-			PaddingBottom = UDim.new(0, 8),
-			PaddingLeft = UDim.new(0, 8),
-			PaddingRight = UDim.new(0, 8)
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.new(0, 8, 0, 8),
+			Size = UDim2.new(1, -16, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			ZIndex = 4
+		})
+
+		create("UIPadding", {
+			Parent = content,
+			PaddingTop = UDim.new(0, 0),
+			PaddingBottom = UDim.new(0, 0),
+			PaddingLeft = UDim.new(0, 0),
+			PaddingRight = UDim.new(0, 0)
 		})
 
 		local pageLayout = create("UIListLayout", {
-			Parent = pageFrame,
+			Parent = content,
 			SortOrder = Enum.SortOrder.LayoutOrder,
 			Padding = UDim.new(0, 8),
 			HorizontalAlignment = Enum.HorizontalAlignment.Center
 		})
 
-		bindCanvas(pageFrame, pageLayout, 16)
+		local function updateCanvas()
+			local height = content.AbsoluteSize.Y + 16
+			pageFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(height, pageFrame.AbsoluteWindowSize.Y))
+		end
+
+		pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+		content:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvas)
+		pageFrame:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateCanvas)
+		task.defer(updateCanvas)
 
 		local tabData = {
 			Button = tabButton,
-			Page = pageFrame
+			Page = pageFrame,
+			Content = content
 		}
 
 		function tabData:AddButton(buttonOptions)
@@ -526,7 +549,7 @@ function UI:CreateWindow(options)
 
 			local button = create("TextButton", {
 				Name = "Button",
-				Parent = pageFrame,
+				Parent = content,
 				TextWrapped = true,
 				BorderSizePixel = 0,
 				BackgroundColor3 = COLORS.Surface,
@@ -558,7 +581,7 @@ function UI:CreateWindow(options)
 
 			local holder = create("Frame", {
 				Name = "Slider",
-				Parent = pageFrame,
+				Parent = content,
 				BackgroundColor3 = COLORS.Surface,
 				BackgroundTransparency = 0,
 				BorderSizePixel = 0,
@@ -708,7 +731,7 @@ function UI:CreateWindow(options)
 
 			local holder = create("Frame", {
 				Name = "Textbox",
-				Parent = pageFrame,
+				Parent = content,
 				BackgroundColor3 = COLORS.Surface,
 				BorderSizePixel = 0,
 				Size = UDim2.new(0, CONTROL_WIDTH, 0, 58),
@@ -783,7 +806,7 @@ function UI:CreateWindow(options)
 
 			local holder = create("TextButton", {
 				Name = "Toggle",
-				Parent = pageFrame,
+				Parent = content,
 				BackgroundColor3 = COLORS.Surface,
 				BorderSizePixel = 0,
 				Size = UDim2.new(0, CONTROL_WIDTH, 0, 48),
@@ -899,7 +922,7 @@ function UI:CreateWindow(options)
 
 			local holder = create("Frame", {
 				Name = "Dropdown",
-				Parent = pageFrame,
+				Parent = content,
 				BackgroundColor3 = COLORS.Surface,
 				BorderSizePixel = 0,
 				Size = UDim2.new(0, CONTROL_WIDTH, 0, baseHeight),

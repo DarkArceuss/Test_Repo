@@ -1,0 +1,1843 @@
+-- cleanup both GUIs from a previous run
+local CoreGui = game:GetService("CoreGui")
+for _, name in ipairs({"AI", "AI_Toggle"}) do
+	local old = CoreGui:FindFirstChild(name)
+	if old then old:Destroy() end
+end
+
+-- Powered by Groq API (https://groq.com)
+
+-- ==== SETTINGS ====
+local GROQ_API_KEY = ""
+local GROQ_MODEL   = "openai/gpt-oss-120b"
+local GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
+
+local MEMORY_FILE  = "ai_chat_memory.json"
+local MAX_RECENT   = 20
+local COMPRESS_AT  = 26
+local COMPRESS_KEEP = 8
+-- ====================
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+local uiElements = {
+	["AI"] = Instance.new("ScreenGui"),
+	["Container"] = Instance.new("Frame"),
+	["UICorner"] = Instance.new("UICorner"),
+	["Chat"] = Instance.new("Frame"),
+	["Messages"] = Instance.new("ScrollingFrame"),
+	["UserTemplate"] = Instance.new("Frame"),
+	["UICorner_1"] = Instance.new("UICorner"),
+	["Message"] = Instance.new("TextLabel"),
+	["UIPadding"] = Instance.new("UIPadding"),
+	["UISizeConstraint"] = Instance.new("UISizeConstraint"),
+	["UIPadding_1"] = Instance.new("UIPadding"),
+	["SysTemplate"] = Instance.new("Frame"),
+	["UICorner_2"] = Instance.new("UICorner"),
+	["Message_1"] = Instance.new("Frame"),
+	["SysMessageLayout"] = Instance.new("UIListLayout"),
+	["SysMessageText"] = Instance.new("TextLabel"),
+	["CodeBlock"] = Instance.new("Frame"),
+	["CodeBlockLayout"] = Instance.new("UIListLayout"),
+	["CodeBlockCorner"] = Instance.new("UICorner"),
+	["CodeHeader"] = Instance.new("Frame"),
+	["CodeHeaderCorner"] = Instance.new("UICorner"),
+	["CodeLang"] = Instance.new("TextLabel"),
+	["CodeCopyBtn"] = Instance.new("TextButton"),
+	["CodeCopyBtnCorner"] = Instance.new("UICorner"),
+	["CodeBox"] = Instance.new("Frame"),
+	["CodeBoxLayout"] = Instance.new("UIListLayout"),
+	["CodeText"] = Instance.new("TextLabel"),
+	["CodeTextPadding"] = Instance.new("UIPadding"),
+	["UIPadding_2"] = Instance.new("UIPadding"),
+	["UISizeConstraint_1"] = Instance.new("UISizeConstraint"),
+	["Buttons"] = Instance.new("Frame"),
+	["UIListLayout"] = Instance.new("UIListLayout"),
+	["UIPadding_3"] = Instance.new("UIPadding"),
+	["Copy"] = Instance.new("ImageButton"),
+	["Header"] = Instance.new("Frame"),
+	["Icon"] = Instance.new("ImageLabel"),
+	["Icon1"] = Instance.new("ImageLabel"),
+	["UICorner_3"] = Instance.new("UICorner"),
+	["UIStroke"] = Instance.new("UIStroke"),
+	["InputBar"] = Instance.new("Frame"),
+	["Bar"] = Instance.new("TextBox"),
+	["UIPadding_4"] = Instance.new("UIPadding"),
+	["UICorner_4"] = Instance.new("UICorner"),
+	["UIStroke_1"] = Instance.new("UIStroke"),
+	["DexRef"] = Instance.new("StringValue"),
+	["MemoryRef"] = Instance.new("StringValue"),
+}
+
+uiElements["AI"].Parent = CoreGui
+uiElements["AI"].Name = "AI"
+uiElements["AI"].ResetOnSpawn = false
+uiElements["AI"].Enabled = false
+
+uiElements["DexRef"].Name = "DarkDEX-v5"
+uiElements["DexRef"].Value = "DEX-like capability module attached to AI. File: DarkDEX-v5.txt"
+uiElements["DexRef"].Parent = uiElements["AI"]
+
+uiElements["MemoryRef"].Name = "MemoryModule"
+uiElements["MemoryRef"].Value = "Persistent conversation memory (auto-summarize)"
+uiElements["MemoryRef"].Parent = uiElements["AI"]
+
+uiElements["Container"].Parent = uiElements["AI"]
+uiElements["Container"].Position = UDim2.new(0.5, 0, 0.5, 0)
+uiElements["Container"].Size = UDim2.new(0.58423912525177, 0, 0.6565656661987305, 0)
+uiElements["Container"].BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+uiElements["Container"].AnchorPoint = Vector2.new(0.5, 0.5)
+
+uiElements["UICorner"].Parent = uiElements["Container"]
+uiElements["UICorner"].CornerRadius = UDim.new(0, 14)
+
+uiElements["Chat"].Parent = uiElements["Container"]
+uiElements["Chat"].Size = UDim2.new(1, 0, 0.9788461327552795, -64)
+uiElements["Chat"].BackgroundTransparency = 1
+
+uiElements["Messages"].Parent = uiElements["Chat"]
+uiElements["Messages"].Position = UDim2.new(0, 0, 0.10786513239145279, 0)
+uiElements["Messages"].Size = UDim2.new(1, 0, 0.9932584762573242, 0)
+uiElements["Messages"].BorderSizePixel = 0
+uiElements["Messages"].BackgroundTransparency = 1
+uiElements["Messages"].AutomaticCanvasSize = Enum.AutomaticSize.None
+uiElements["Messages"].CanvasSize = UDim2.new(0, 0, 0, 68)
+uiElements["Messages"].ScrollBarImageColor3 = Color3.fromRGB(0, 0, 0)
+uiElements["Messages"].ScrollBarThickness = 8
+
+uiElements["UIPadding_1"].Parent = uiElements["Messages"]
+uiElements["UIPadding_1"].PaddingTop = UDim.new(0, 8)
+uiElements["UIPadding_1"].PaddingRight = UDim.new(0, 8)
+
+uiElements["UserTemplate"].Parent = uiElements["Messages"]
+uiElements["UserTemplate"].Position = UDim2.new(1, 0, 0, 0)
+uiElements["UserTemplate"].Size = UDim2.new(0, 100, 0, 30)
+uiElements["UserTemplate"].BackgroundColor3 = Color3.fromRGB(23, 23, 23)
+uiElements["UserTemplate"].AnchorPoint = Vector2.new(1, 0)
+uiElements["UserTemplate"].AutomaticSize = Enum.AutomaticSize.XY
+uiElements["UserTemplate"].BorderSizePixel = 0
+uiElements["UserTemplate"].Visible = false
+
+uiElements["UICorner_1"].Parent = uiElements["UserTemplate"]
+uiElements["UICorner_1"].CornerRadius = UDim.new(1, 0)
+
+uiElements["Message"].Parent = uiElements["UserTemplate"]
+uiElements["Message"].Size = UDim2.new(1, 0, 1, 0)
+uiElements["Message"].BackgroundTransparency = 1
+uiElements["Message"].AutomaticSize = Enum.AutomaticSize.XY
+uiElements["Message"].BorderSizePixel = 0
+uiElements["Message"].Font = Enum.Font.GothamMedium
+uiElements["Message"].TextColor3 = Color3.fromRGB(190, 190, 190)
+uiElements["Message"].TextSize = 18
+uiElements["Message"].RichText = true
+uiElements["Message"].Text = "X"
+uiElements["Message"].TextWrapped = true
+
+uiElements["UIPadding"].Parent = uiElements["Message"]
+uiElements["UIPadding"].PaddingTop = UDim.new(0, 3)
+uiElements["UIPadding"].PaddingBottom = UDim.new(0, 3)
+uiElements["UIPadding"].PaddingLeft = UDim.new(0, 8)
+uiElements["UIPadding"].PaddingRight = UDim.new(0, 8)
+
+uiElements["UISizeConstraint"].Parent = uiElements["UserTemplate"]
+
+uiElements["SysTemplate"].Parent = uiElements["Messages"]
+uiElements["SysTemplate"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["SysTemplate"].BackgroundTransparency = 1
+uiElements["SysTemplate"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["SysTemplate"].BorderSizePixel = 0
+uiElements["SysTemplate"].Visible = false
+
+uiElements["UICorner_2"].Parent = uiElements["SysTemplate"]
+uiElements["UICorner_2"].CornerRadius = UDim.new(1, 0)
+
+uiElements["Message_1"].Parent = uiElements["SysTemplate"]
+uiElements["Message_1"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["Message_1"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["Message_1"].BackgroundTransparency = 1
+uiElements["Message_1"].BorderSizePixel = 0
+
+uiElements["UIPadding_2"].Parent = uiElements["Message_1"]
+uiElements["UIPadding_2"].PaddingTop = UDim.new(0, 3)
+uiElements["UIPadding_2"].PaddingBottom = UDim.new(0, 3)
+uiElements["UIPadding_2"].PaddingLeft = UDim.new(0, 8)
+uiElements["UIPadding_2"].PaddingRight = UDim.new(0, 8)
+
+uiElements["SysMessageLayout"].Parent = uiElements["Message_1"]
+uiElements["SysMessageLayout"].Padding = UDim.new(0, 6)
+uiElements["SysMessageLayout"].FillDirection = Enum.FillDirection.Vertical
+uiElements["SysMessageLayout"].SortOrder = Enum.SortOrder.LayoutOrder
+
+uiElements["SysMessageText"].Parent = uiElements["Message_1"]
+uiElements["SysMessageText"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["SysMessageText"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["SysMessageText"].BackgroundTransparency = 1
+uiElements["SysMessageText"].BorderSizePixel = 0
+uiElements["SysMessageText"].Font = Enum.Font.GothamMedium
+uiElements["SysMessageText"].TextColor3 = Color3.fromRGB(190, 190, 190)
+uiElements["SysMessageText"].TextSize = 18
+uiElements["SysMessageText"].RichText = true
+uiElements["SysMessageText"].Text = ""
+uiElements["SysMessageText"].TextWrapped = true
+uiElements["SysMessageText"].TextXAlignment = Enum.TextXAlignment.Left
+uiElements["SysMessageText"].TextYAlignment = Enum.TextYAlignment.Top
+uiElements["SysMessageText"].Visible = false
+
+uiElements["CodeBlock"].Parent = uiElements["Message_1"]
+uiElements["CodeBlock"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["CodeBlock"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["CodeBlock"].BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+uiElements["CodeBlock"].BorderSizePixel = 0
+uiElements["CodeBlock"].Visible = false
+
+uiElements["CodeBlockLayout"].Parent = uiElements["CodeBlock"]
+uiElements["CodeBlockLayout"].Padding = UDim.new(0, 0)
+uiElements["CodeBlockLayout"].FillDirection = Enum.FillDirection.Vertical
+uiElements["CodeBlockLayout"].SortOrder = Enum.SortOrder.LayoutOrder
+
+uiElements["CodeBlockCorner"].Parent = uiElements["CodeBlock"]
+uiElements["CodeBlockCorner"].CornerRadius = UDim.new(0, 8)
+
+uiElements["CodeHeader"].Parent = uiElements["CodeBlock"]
+uiElements["CodeHeader"].Size = UDim2.new(1, 0, 0, 28)
+uiElements["CodeHeader"].BackgroundColor3 = Color3.fromRGB(28, 28, 30)
+uiElements["CodeHeader"].BorderSizePixel = 0
+uiElements["CodeHeader"].LayoutOrder = 0
+
+uiElements["CodeHeaderCorner"].Parent = uiElements["CodeHeader"]
+uiElements["CodeHeaderCorner"].CornerRadius = UDim.new(0, 8)
+
+uiElements["CodeLang"].Parent = uiElements["CodeHeader"]
+uiElements["CodeLang"].Position = UDim2.new(0, 12, 0.5, 0)
+uiElements["CodeLang"].AnchorPoint = Vector2.new(0, 0.5)
+uiElements["CodeLang"].Size = UDim2.new(0.5, 0, 1, 0)
+uiElements["CodeLang"].BackgroundTransparency = 1
+uiElements["CodeLang"].Font = Enum.Font.GothamMedium
+uiElements["CodeLang"].TextColor3 = Color3.fromRGB(150, 150, 155)
+uiElements["CodeLang"].TextSize = 13
+uiElements["CodeLang"].TextXAlignment = Enum.TextXAlignment.Left
+uiElements["CodeLang"].Text = "code"
+
+uiElements["CodeCopyBtn"].Parent = uiElements["CodeHeader"]
+uiElements["CodeCopyBtn"].Position = UDim2.new(1, -8, 0.5, 0)
+uiElements["CodeCopyBtn"].AnchorPoint = Vector2.new(1, 0.5)
+uiElements["CodeCopyBtn"].Size = UDim2.new(0, 64, 0, 20)
+uiElements["CodeCopyBtn"].BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+uiElements["CodeCopyBtn"].BorderSizePixel = 0
+uiElements["CodeCopyBtn"].Font = Enum.Font.GothamMedium
+uiElements["CodeCopyBtn"].TextColor3 = Color3.fromRGB(220, 220, 220)
+uiElements["CodeCopyBtn"].TextSize = 12
+uiElements["CodeCopyBtn"].Text = "Copy"
+uiElements["CodeCopyBtn"].AutoButtonColor = true
+
+uiElements["CodeCopyBtnCorner"].Parent = uiElements["CodeCopyBtn"]
+uiElements["CodeCopyBtnCorner"].CornerRadius = UDim.new(0, 6)
+
+uiElements["CodeBox"].Parent = uiElements["CodeBlock"]
+uiElements["CodeBox"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["CodeBox"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["CodeBox"].BackgroundTransparency = 1
+uiElements["CodeBox"].BorderSizePixel = 0
+uiElements["CodeBox"].LayoutOrder = 1
+
+uiElements["CodeBoxLayout"].Parent = uiElements["CodeBox"]
+uiElements["CodeBoxLayout"].Padding = UDim.new(0, 0)
+uiElements["CodeBoxLayout"].FillDirection = Enum.FillDirection.Vertical
+uiElements["CodeBoxLayout"].SortOrder = Enum.SortOrder.LayoutOrder
+
+uiElements["CodeText"].Parent = uiElements["CodeBox"]
+uiElements["CodeText"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["CodeText"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["CodeText"].BackgroundTransparency = 1
+uiElements["CodeText"].BorderSizePixel = 0
+uiElements["CodeText"].Font = Enum.Font.Code
+uiElements["CodeText"].TextColor3 = Color3.fromRGB(220, 220, 220)
+uiElements["CodeText"].TextSize = 15
+uiElements["CodeText"].TextXAlignment = Enum.TextXAlignment.Left
+uiElements["CodeText"].TextYAlignment = Enum.TextYAlignment.Top
+uiElements["CodeText"].TextWrapped = true
+uiElements["CodeText"].RichText = false
+uiElements["CodeText"].Text = ""
+
+uiElements["CodeTextPadding"].Parent = uiElements["CodeText"]
+uiElements["CodeTextPadding"].PaddingTop = UDim.new(0, 8)
+uiElements["CodeTextPadding"].PaddingBottom = UDim.new(0, 8)
+uiElements["CodeTextPadding"].PaddingLeft = UDim.new(0, 12)
+uiElements["CodeTextPadding"].PaddingRight = UDim.new(0, 12)
+
+uiElements["UISizeConstraint_1"].Parent = uiElements["SysTemplate"]
+
+uiElements["Buttons"].Parent = uiElements["SysTemplate"]
+uiElements["Buttons"].Position = UDim2.new(0, 0, 1, 0)
+uiElements["Buttons"].Size = UDim2.new(1, 0, 0, 15)
+uiElements["Buttons"].BackgroundTransparency = 1
+uiElements["Buttons"].BorderSizePixel = 0
+
+uiElements["UIListLayout"].Parent = uiElements["Buttons"]
+uiElements["UIListLayout"].Padding = UDim.new(0, 4)
+uiElements["UIListLayout"].FillDirection = Enum.FillDirection.Horizontal
+uiElements["UIListLayout"].SortOrder = Enum.SortOrder.LayoutOrder
+
+uiElements["UIPadding_3"].Parent = uiElements["Buttons"]
+uiElements["UIPadding_3"].PaddingLeft = UDim.new(0, 4)
+
+uiElements["Copy"].Parent = uiElements["Buttons"]
+uiElements["Copy"].Size = UDim2.new(0, 15, 1, 0)
+uiElements["Copy"].BackgroundTransparency = 1
+uiElements["Copy"].Active = false
+uiElements["Copy"].BorderSizePixel = 0
+uiElements["Copy"].Image = "rbxassetid://93531807477279"
+
+uiElements["Header"].Parent = uiElements["Chat"]
+uiElements["Header"].Size = UDim2.new(1, 0, -0.017977528274059296, 50)
+uiElements["Header"].BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+uiElements["Header"].BorderSizePixel = 0
+uiElements["Header"].ZIndex = 0
+
+uiElements["Icon"].Parent = uiElements["Header"]
+uiElements["Icon"].Position = UDim2.new(0, 8, 0, 8)
+uiElements["Icon"].Size = UDim2.new(0, 30, 0, 30)
+uiElements["Icon"].BackgroundTransparency = 1
+uiElements["Icon"].BorderSizePixel = 0
+uiElements["Icon"].Image = "rbxassetid://125966901198850"
+
+uiElements["Icon1"].Parent = uiElements["Header"]
+uiElements["Icon1"].Position = UDim2.new(1, -8, 0, 8)
+uiElements["Icon1"].Size = UDim2.new(0, 30, 0, 30)
+uiElements["Icon1"].AnchorPoint = Vector2.new(1, 0)
+uiElements["Icon1"].BackgroundTransparency = 1
+uiElements["Icon1"].BorderSizePixel = 0
+uiElements["Icon1"].Image = "rbxassetid://73985599900390"
+
+uiElements["UICorner_3"].Parent = uiElements["Header"]
+uiElements["UICorner_3"].CornerRadius = UDim.new(1, 0)
+
+uiElements["UIStroke"].Parent = uiElements["Container"]
+uiElements["UIStroke"].Color = Color3.fromRGB(40, 40, 40)
+
+uiElements["InputBar"].Parent = uiElements["Container"]
+uiElements["InputBar"].Position = UDim2.new(0, 0, 1, 0)
+uiElements["InputBar"].Size = UDim2.new(1, 0, 0, 0)
+uiElements["InputBar"].AnchorPoint = Vector2.new(0, 1)
+uiElements["InputBar"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["InputBar"].BackgroundTransparency = 1
+uiElements["InputBar"].BorderSizePixel = 0
+
+uiElements["Bar"].Parent = uiElements["InputBar"]
+uiElements["Bar"].Position = UDim2.new(0.5, 0, 1, -4)
+uiElements["Bar"].Size = UDim2.new(1, -16, 1, 0)
+uiElements["Bar"].BackgroundColor3 = Color3.fromRGB(23, 23, 23)
+uiElements["Bar"].AnchorPoint = Vector2.new(0.5, 1)
+uiElements["Bar"].AutomaticSize = Enum.AutomaticSize.Y
+uiElements["Bar"].BorderSizePixel = 0
+uiElements["Bar"].Font = Enum.Font.GothamMedium
+uiElements["Bar"].TextColor3 = Color3.fromRGB(220, 220, 220)
+uiElements["Bar"].TextSize = 18
+uiElements["Bar"].Text = ""
+uiElements["Bar"].PlaceholderText = "Ask | @ch | @server | @search | @think | @memory | @clear"
+uiElements["Bar"].TextWrapped = true
+uiElements["Bar"].TextXAlignment = Enum.TextXAlignment.Left
+uiElements["Bar"].ClearTextOnFocus = false
+uiElements["Bar"].MultiLine = false
+
+uiElements["UIPadding_4"].Parent = uiElements["Bar"]
+uiElements["UIPadding_4"].PaddingTop = UDim.new(0, 4)
+uiElements["UIPadding_4"].PaddingBottom = UDim.new(0, 4)
+uiElements["UIPadding_4"].PaddingLeft = UDim.new(0, 16)
+uiElements["UIPadding_4"].PaddingRight = UDim.new(0, 16)
+
+uiElements["UICorner_4"].Parent = uiElements["Bar"]
+uiElements["UICorner_4"].CornerRadius = UDim.new(1, 0)
+
+uiElements["UIStroke_1"].Parent = uiElements["Bar"]
+uiElements["UIStroke_1"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+uiElements["UIStroke_1"].Color = Color3.fromRGB(40, 40, 40)
+uiElements["UIStroke_1"].Thickness = 0.6
+
+for name, i in next, uiElements do i.Name = name:gsub("_%d+", "") end
+
+-- ==================== TOPBAR TOGGLE BUTTON ====================
+-- A native-looking Roblox topbar button: transparent background,
+-- no stroke, no corner radius, 28x28, aligned with core buttons.
+
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "AI_Toggle"
+toggleGui.ResetOnSpawn = false
+toggleGui.IgnoreGuiInset = true
+toggleGui.DisplayOrder = 1000
+toggleGui.Parent = CoreGui
+
+local toggleBtn = Instance.new("ImageButton")
+toggleBtn.Name = "ToggleButton"
+toggleBtn.Size = UDim2.new(0, 28, 0, 28)
+toggleBtn.Position = UDim2.new(1, -52, 0, 6)
+toggleBtn.AnchorPoint = Vector2.new(1, 0)
+toggleBtn.BackgroundTransparency = 1
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Image = "rbxassetid://93337735939744"
+toggleBtn.ImageColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.AutoButtonColor = false
+toggleBtn.Parent = toggleGui
+
+local chatGui = uiElements["AI"]
+
+local function updateToggleAppearance()
+	if chatGui.Enabled then
+		toggleBtn.ImageColor3 = Color3.fromRGB(90, 170, 255)
+	else
+		toggleBtn.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	end
+end
+
+toggleBtn.MouseEnter:Connect(function()
+	if not chatGui.Enabled then
+		toggleBtn.ImageColor3 = Color3.fromRGB(220, 220, 220)
+	end
+end)
+toggleBtn.MouseLeave:Connect(function()
+	updateToggleAppearance()
+end)
+
+toggleBtn.MouseButton1Click:Connect(function()
+	chatGui.Enabled = not chatGui.Enabled
+	updateToggleAppearance()
+end)
+
+updateToggleAppearance()
+
+-- ==================== LOGIC ====================
+
+local box = uiElements["Bar"]
+local messagesList = uiElements["Messages"]
+local userTemplate, sysTemplate = uiElements.UserTemplate, uiElements.SysTemplate
+local isGenerating = false
+local isStudio = game:GetService("RunService"):IsStudio()
+local messageOrder = 0
+
+local http_func = request or (http and http.request) or http_request or (syn and syn.request)
+
+-- ==================== FILE IO ====================
+
+local hasFileIO = (type(writefile) == "function") and (type(readfile) == "function") and (type(isfile) == "function")
+
+local function saveFile(name, data)
+	if not hasFileIO then return end
+	pcall(function() writefile(name, data) end)
+end
+local function readFile(name)
+	if not hasFileIO then return nil end
+	if not isfile(name) then return nil end
+	local ok, data = pcall(readfile, name)
+	if ok then return data end
+	return nil
+end
+
+-- ==================== MEMORY ====================
+
+local memory = {
+	summary = "",
+	facts = {},
+	recent = {},
+	savedAt = os.time and os.time() or 0,
+}
+
+local function loadMemory()
+	local raw = readFile(MEMORY_FILE)
+	if raw and raw ~= "" then
+		local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+		if ok and type(data) == "table" then
+			memory.summary = data.summary or ""
+			memory.facts = data.facts or {}
+			memory.recent = data.recent or {}
+			memory.savedAt = data.savedAt or 0
+		end
+	end
+end
+
+local function saveMemory()
+	memory.savedAt = os.time and os.time() or 0
+	local ok, enc = pcall(function() return HttpService:JSONEncode(memory) end)
+	if ok then saveFile(MEMORY_FILE, enc) end
+end
+
+-- ==================== HELPERS ====================
+
+local function getChar()
+	local char = LocalPlayer and LocalPlayer.Character
+	if not char then return nil end
+	return char, char:FindFirstChildOfClass("Humanoid"), char:FindFirstChild("HumanoidRootPart")
+end
+local function getHum() local _, h = getChar() return h end
+local function getHRP() local _, _, r = getChar() return r end
+
+local function resolvePath(path)
+	if not path or type(path) ~= "string" then return nil end
+	path = path:gsub("^game%.", ""):gsub("^game:", "")
+	local parts = {}
+	for part in path:gmatch("[^%.]+") do table.insert(parts, part) end
+	local current = game
+	for _, part in ipairs(parts) do
+		if current == game then
+			local svc = game:FindFirstChild(part)
+			if svc then current = svc
+			else
+				local ok, s = pcall(function() return game:GetService(part) end)
+				if ok and s then current = s else return nil end
+			end
+		else
+			local n = current:FindFirstChild(part)
+			if not n then return nil end
+			current = n
+		end
+	end
+	return current
+end
+
+local function getPath(obj)
+	if not obj then return "nil" end
+	local ok, full = pcall(function() return obj:GetFullName() end)
+	return ok and full or obj.Name
+end
+
+-- ==================== CHARACTER ACTIONS ====================
+
+local CHARACTER_ACTIONS = {
+	set_speed = function(p)
+		local h = getHum(); if not h then return false, "no character" end
+		h.WalkSpeed = tonumber(p.value) or h.WalkSpeed
+		return true, "WalkSpeed = " .. tostring(h.WalkSpeed)
+	end,
+	set_jump = function(p)
+		local h = getHum(); if not h then return false, "no character" end
+		h.UseJumpPower = true; h.JumpPower = tonumber(p.value) or h.JumpPower
+		return true, "JumpPower = " .. tostring(h.JumpPower)
+	end,
+	set_hip_height = function(p)
+		local h = getHum(); if not h then return false, "no character" end
+		h.HipHeight = tonumber(p.value) or h.HipHeight
+		return true, "HipHeight = " .. tostring(h.HipHeight)
+	end,
+	teleport = function(p)
+		local r = getHRP(); if not r then return false, "no character" end
+		local x = tonumber(p.x) or r.Position.X
+		local y = tonumber(p.y) or r.Position.Y
+		local z = tonumber(p.z) or r.Position.Z
+		r.CFrame = CFrame.new(x, y, z)
+		return true, string.format("Teleport to (%.1f, %.1f, %.1f)", x, y, z)
+	end,
+	get_position = function()
+		local r = getHRP(); if not r then return false, "no character" end
+		local p = r.Position
+		return true, string.format("Position: (%.1f, %.1f, %.1f)", p.X, p.Y, p.Z)
+	end,
+	heal = function()
+		local h = getHum(); if not h then return false, "no character" end
+		h.Health = h.MaxHealth
+		return true, "Health restored"
+	end,
+	set_health = function(p)
+		local h = getHum(); if not h then return false, "no character" end
+		local v = tonumber(p.value); if not v then return false, "value not specified" end
+		h.Health = math.clamp(v, 0, h.MaxHealth)
+		return true, "Health = " .. tostring(h.Health)
+	end,
+	respawn = function()
+		if not LocalPlayer then return false, "no player" end
+		LocalPlayer:LoadCharacter()
+		return true, "Character respawned"
+	end,
+}
+
+-- ==================== SERVER ACTIONS ====================
+
+local SERVER_ACTIONS = {}
+for k, v in pairs(CHARACTER_ACTIONS) do SERVER_ACTIONS[k] = v end
+
+SERVER_ACTIONS.set_lighting = function(p)
+	if not p.property then return false, "property not specified" end
+	local ok, err = pcall(function() Lighting[p.property] = p.value end)
+	if not ok then return false, "error: " .. tostring(err) end
+	local ok2, v = pcall(function() return Lighting[p.property] end)
+	return true, "Lighting." .. p.property .. " = " .. (ok2 and tostring(v) or "?")
+end
+SERVER_ACTIONS.set_time = function(p)
+	Lighting.ClockTime = tonumber(p.value) or 14
+	return true, "ClockTime = " .. tostring(Lighting.ClockTime)
+end
+SERVER_ACTIONS.set_ambient = function(p)
+	Lighting.Ambient = Color3.fromRGB(tonumber(p.r) or 0, tonumber(p.g) or 0, tonumber(p.b) or 0)
+	return true, "Ambient = " .. tostring(Lighting.Ambient)
+end
+SERVER_ACTIONS.set_fog = function(p)
+	if p.start then Lighting.FogStart = tonumber(p.start) end
+	if p.finish then Lighting.FogEnd = tonumber(p.finish) end
+	if p.r and p.g and p.b then
+		Lighting.FogColor = Color3.fromRGB(tonumber(p.r), tonumber(p.g), tonumber(p.b))
+	end
+	return true, string.format("FogStart=%s FogEnd=%s", tostring(Lighting.FogStart), tostring(Lighting.FogEnd))
+end
+SERVER_ACTIONS.get_lighting = function()
+	local keys = {"Ambient","Brightness","ClockTime","FogColor","FogEnd","FogStart","OutdoorAmbient","TimeOfDay","GlobalShadows"}
+	local lines = {}
+	for _, k in ipairs(keys) do
+		local ok, v = pcall(function() return Lighting[k] end)
+		if ok then table.insert(lines, k .. " = " .. tostring(v)) end
+	end
+	return true, table.concat(lines, "\n")
+end
+SERVER_ACTIONS.set_gravity = function(p)
+	local v = tonumber(p.value); if not v then return false, "value not specified" end
+	workspace.Gravity = v
+	return true, "Gravity = " .. tostring(workspace.Gravity)
+end
+SERVER_ACTIONS.set_fov = function(p)
+	local cam = workspace.CurrentCamera; if not cam then return false, "no camera" end
+	cam.FieldOfView = math.clamp(tonumber(p.value) or cam.FieldOfView, 1, 120)
+	return true, "FOV = " .. tostring(cam.FieldOfView)
+end
+SERVER_ACTIONS.find_object = function(p)
+	if not p.name and not p.class then return false, "specify name or class" end
+	local found = {}
+	local limit = tonumber(p.limit) or 20
+	for _, obj in ipairs(game:GetDescendants()) do
+		if #found >= limit then break end
+		local mn = (not p.name) or obj.Name:lower():find(tostring(p.name):lower(), 1, true)
+		local mc = (not p.class) or pcall(function() return obj:IsA(p.class) end) and obj:IsA(p.class)
+		if mn and mc then table.insert(found, obj:GetFullName()) end
+	end
+	if #found == 0 then return true, "Nothing found" end
+	return true, "Found (" .. #found .. "):\n" .. table.concat(found, "\n")
+end
+SERVER_ACTIONS.get_object_path = function(p)
+	if not p.name then return false, "specify name" end
+	for _, obj in ipairs(game:GetDescendants()) do
+		if obj.Name:lower() == tostring(p.name):lower() then return true, obj:GetFullName() end
+	end
+	return false, "Object not found: " .. tostring(p.name)
+end
+SERVER_ACTIONS.list_descendants = function(p)
+	local path = p.path or "Workspace"
+	local obj = resolvePath(path)
+	if not obj then return false, "Path not found: " .. tostring(path) end
+	local list = {}
+	for i, child in ipairs(obj:GetChildren()) do
+		if i > 50 then break end
+		table.insert(list, child.ClassName .. " " .. child.Name)
+	end
+	return true, path .. " (" .. #list .. "):\n" .. table.concat(list, "\n")
+end
+SERVER_ACTIONS.set_object_property = function(p)
+	if not p.path or not p.property then return false, "path and property required" end
+	local obj = resolvePath(p.path)
+	if not obj then return false, "Path not found: " .. p.path end
+	local ok, err = pcall(function() obj[p.property] = p.value end)
+	if not ok then return false, "error: " .. tostring(err) end
+	local ok2, v = pcall(function() return obj[p.property] end)
+	return true, p.path .. "." .. p.property .. " = " .. (ok2 and tostring(v) or "?")
+end
+SERVER_ACTIONS.get_object_property = function(p)
+	if not p.path or not p.property then return false, "path and property required" end
+	local obj = resolvePath(p.path)
+	if not obj then return false, "Path not found: " .. p.path end
+	local ok, v = pcall(function() return obj[p.property] end)
+	if not ok then return false, "read error: " .. tostring(v) end
+	return true, p.path .. "." .. p.property .. " = " .. tostring(v)
+end
+SERVER_ACTIONS.teleport_to_object = function(p)
+	if not p.path then return false, "specify path" end
+	local obj = resolvePath(p.path)
+	if not obj then return false, "Path not found: " .. p.path end
+	local basePart = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
+	if not basePart then return false, "No BasePart in object" end
+	local r = getHRP(); if not r then return false, "no character" end
+	r.CFrame = basePart.CFrame + Vector3.new(0, 5, 0)
+	return true, "Teleported to " .. p.path
+end
+SERVER_ACTIONS.destroy_object = function(p)
+	if not p.path then return false, "specify path" end
+	local obj = resolvePath(p.path)
+	if not obj then return false, "Path not found: " .. p.path end
+	obj:Destroy()
+	return true, "Destroyed: " .. p.path
+end
+SERVER_ACTIONS.clone_object = function(p)
+	if not p.path then return false, "specify path" end
+	local obj = resolvePath(p.path)
+	if not obj then return false, "Path not found: " .. p.path end
+	local clone = obj:Clone()
+	clone.Parent = obj.Parent
+	return true, "Cloned: " .. p.path .. " -> " .. getPath(clone)
+end
+SERVER_ACTIONS.list_players = function()
+	local list = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		table.insert(list, plr.Name .. " (" .. plr.DisplayName .. ", id=" .. plr.UserId .. ")")
+	end
+	return true, "Players (" .. #list .. "):\n" .. table.concat(list, "\n")
+end
+SERVER_ACTIONS.get_workspace_stats = function()
+	local parts = 0
+	for _, v in ipairs(workspace:GetDescendants()) do
+		if v:IsA("BasePart") then parts = parts + 1 end
+	end
+	return true, string.format("Parts=%d, Descendants=%d, Players=%d", parts, #workspace:GetDescendants(), #Players:GetPlayers())
+end
+SERVER_ACTIONS.get_character_info = function()
+	local char, hum, hrp = getChar()
+	if not char then return false, "no character" end
+	local p = hrp and hrp.Position or Vector3.new()
+	return true, string.format("HP=%d/%d, WalkSpeed=%d, JumpPower=%d, Pos=(%.1f,%.1f,%.1f)",
+		hum and hum.Health or 0, hum and hum.MaxHealth or 0,
+		hum and hum.WalkSpeed or 0, hum and hum.JumpPower or 0,
+		p.X, p.Y, p.Z)
+end
+
+local function executeAction(action, useServer)
+	if type(action) ~= "table" then return false, "invalid format" end
+	local t = action.type
+	if type(t) ~= "string" then return false, "no type" end
+	local tbl = useServer and SERVER_ACTIONS or CHARACTER_ACTIONS
+	local fn = tbl[t]
+	if not fn then return false, "unknown action: " .. t end
+	local ok, s, m = pcall(fn, action)
+	if not ok then return false, "error: " .. tostring(s) end
+	return s, m or "ok"
+end
+
+-- ==================== WEB ====================
+
+local function htmlDecode(s)
+	s = s:gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">")
+	s = s:gsub("&quot;", "\""):gsub("&#x27;", "'"):gsub("&#39;", "'")
+	s = s:gsub("&nbsp;", " "):gsub("&#x2F;", "/"):gsub("&hellip;", "...")
+	return s
+end
+local function stripTags(s) return htmlDecode(s:gsub("<[^>]->", "")) end
+local function decodeDDGUrl(href)
+	if not href or href == "" then return "" end
+	if href:sub(1,2) == "//" then href = "https:" .. href end
+	local uddg = href:match("[?&]uddg=([^&]+)")
+	if uddg then
+		local ok, decoded = pcall(function() return HttpService:UrlDecode(uddg) end)
+		if ok and decoded then return decoded end
+	end
+	return href
+end
+
+local function doHttpGet(url, headers)
+	headers = headers or {}
+	headers["User-Agent"] = headers["User-Agent"] or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+	local data = { Url = url, Method = "GET", Headers = headers }
+	if isStudio then
+		return game.ReplicatedStorage.HTTP:InvokeServer(data)
+	else
+		if not http_func then error("No HTTP function available") end
+		return http_func(data)
+	end
+end
+
+local function webSearch(query)
+	local results = {}
+	if not query or query == "" then return results end
+	local url = "https://html.duckduckgo.com/html/?q=" .. HttpService:UrlEncode(query)
+	local ok, res = pcall(doHttpGet, url, {["Accept"] = "text/html"})
+	if ok and res and res.Body then
+		local body = res.Body
+		for a in body:gmatch('<a[^>]-class="result__a"[^>]->.-</a>') do
+			local href = a:match('href="([^"]+)"') or ""
+			local title = a:match('>([^<]+)</a>') or a:match('>(.-)</a>') or ""
+			local link = decodeDDGUrl(href)
+			if link ~= "" and title ~= "" then
+				table.insert(results, { title = stripTags(title), url = link, snippet = "" })
+			end
+		end
+		local snippets = {}
+		for sn in body:gmatch('<a[^>]-class="result__snippet"[^>]->(.-)</a>') do
+			table.insert(snippets, stripTags(sn))
+		end
+		for i, s in ipairs(snippets) do
+			if results[i] then results[i].snippet = s end
+		end
+	end
+	if #results == 0 then
+		local apiUrl = "https://api.duckduckgo.com/?q=" .. HttpService:UrlEncode(query) .. "&format=json&no_html=1&skip_disambig=1"
+		local ok2, res2 = pcall(doHttpGet, apiUrl)
+		if ok2 and res2 and res2.Body then
+			local ok3, data = pcall(function() return HttpService:JSONDecode(res2.Body) end)
+			if ok3 and data then
+				if data.AbstractText and data.AbstractText ~= "" then
+					table.insert(results, { title = data.Heading or query, url = data.AbstractURL or "", snippet = data.AbstractText })
+				end
+				if data.RelatedTopics then
+					for _, t in ipairs(data.RelatedTopics) do
+						if t.Text and t.FirstURL then
+							table.insert(results, { title = t.Text:sub(1, 80), url = t.FirstURL, snippet = t.Text })
+							if #results >= 5 then break end
+						end
+					end
+				end
+			end
+		end
+	end
+	return results
+end
+
+local function formatSearchResults(results, limit)
+	limit = limit or 6
+	local lines = {}
+	for i = 1, math.min(#results, limit) do
+		local r = results[i]
+		table.insert(lines, string.format("[%d] %s\n%s\n%s", i, r.title, r.snippet or "", r.url or ""))
+	end
+	return table.concat(lines, "\n\n")
+end
+
+-- ==================== PROMPTS ====================
+
+local BASE_SYSTEM = [[You are a helpful AI assistant with persistent memory. Format code inside ```language ... ``` blocks.
+
+LANGUAGE RULE (CRITICAL):
+- Always reply in the SAME language the user used in their last message.
+- If the user writes in Russian, reply in Russian. If in English, reply in English.
+- Never switch languages unless the user explicitly asks.
+- This rule overrides any other instruction.
+
+MARKDOWN: You may use full Markdown: headings, bold, italic, inline code, fenced code blocks, tables, blockquotes, lists (bulleted, numbered, nested, task lists), horizontal rules, and links [text](url).
+
+When using tables, put each row on its own line, use | as separator, and put a separator row like |---|---| after the header.]]
+
+local MEMORY_SYSTEM_TEMPLATE = [[Here is what you remember from the earlier conversation with this user.
+
+SUMMARY OF OLDER CONTEXT:
+%s
+
+KNOWN FACTS ABOUT THE USER:
+%s
+
+RULES:
+- Use this memory naturally, do not mention "memory system" explicitly.
+- If the user references something from earlier, recall it accurately.
+- If memory is empty, ignore this block.]]
+
+local MEMORY_EXTRACT_PROMPT = [[Extract durable facts about the user from the dialogue below. Facts should be short, useful, timeless (name, preferences, projects, goals, language, tech stack etc.).
+
+Reply with ONLY valid JSON:
+{ "facts": ["<fact1>", "<fact2>"] }
+
+If no facts, return { "facts": [] }. No markdown, no fences.]]
+
+local COMPRESS_PROMPT = [[You are a memory compressor. You are given the previous summary (may be empty) and a chunk of recent dialogue.
+Produce a NEW, updated summary (2-6 sentences) that captures everything important: goals, decisions, code, results, personal info.
+
+RULES:
+- Preserve concrete data (names, numbers, coordinates, code names).
+- Drop small talk.
+- Write in English, regardless of the dialogue language.
+- Output ONLY the summary text. No JSON, no markdown headers.]]
+
+local TOOL_PROMPT_CH = [[You are an assistant that CONTROLS a Roblox character on the client.
+User prefix: "@ch". Reply with a SINGLE valid JSON object. No markdown, no code fences, no extra text.
+JSON: { "reply": "<short reply in user's language>", "actions": [ { "type": "<action>", ...params } ] }
+Available: set_speed(value), set_jump(value), set_hip_height(value), teleport(x,y,z), get_position, heal, set_health(value), respawn.
+Use ONLY listed names. The "reply" field MUST be in the same language as the user message. Output ONLY JSON.]]
+
+local TOOL_PROMPT_SERVER = [[You are an assistant with DarkDEX-like LOCAL game access.
+User prefix: "@server". Reply with a SINGLE valid JSON object. No markdown, no fences.
+JSON: { "reply": "<short reply in user's language>", "actions": [ { "type": "<action>", ...params } ] }
+Available: set_lighting(property,value), set_time(value), set_ambient(r,g,b), set_fog(start,finish,r,g,b), get_lighting,
+set_gravity(value), set_fov(value), find_object(name,class,limit), get_object_path(name), list_descendants(path),
+set_object_property(path,property,value), get_object_property(path,property), teleport_to_object(path),
+destroy_object(path), clone_object(path), list_players, get_workspace_stats, get_character_info,
+set_speed(value), set_jump(value), teleport(x,y,z), heal, respawn.
+Path format: "Workspace.Model.Part". The "reply" field MUST be in the same language as the user message. Output ONLY JSON.]]
+
+local SEARCH_PROMPT = [[You answer the user's question based STRICTLY on the web search results in the next system message.
+Rules: answer in the SAME language as the user's question; be concise (2-6 sentences); if insufficient, say so;
+list 1-3 sources at the end as: "Sources: [1] url, [2] url"; do NOT invent facts. No JSON.]]
+
+local THINK_ROUTER_PROMPT = [[You decide whether answering requires FRESH info from the internet (news, prices, recent releases, current facts).
+Reply with ONLY JSON: { "needs_search": true|false, "search_query": "<short or empty>", "plan": "<short plan>" }]]
+
+local THINK_ANSWER_PROMPT = [[You are an expert reasoner. Think STEP BY STEP inside your head, then give a deep, well-structured answer.
+Rules:
+- Answer in the SAME language as the user's question.
+- Structure: short intro, analysis (list), conclusion.
+- Be specific and correct.
+- If web sources are given below, USE them and cite as [1], [2].
+- Markdown formatting allowed.]]
+
+-- ==================== MARKDOWN INLINE ====================
+
+local function richText(txt)
+	local out = {}
+	for line in (txt .. "\n"):gmatch("([^\n]*)\n") do
+		local h, rest = line:match("^(#+)%s+(.*)$")
+		if h and #h <= 6 then
+			line = `<font size="{25 - #h * 2}"><b>{rest}</b></font>`
+		end
+		table.insert(out, line)
+	end
+	txt = table.concat(out, "\n")
+
+	txt = txt:gsub("!%[([^%]]*)%]%(([^%)]+)%)", "<font color='#7FB8FF'>%1</font>")
+	txt = txt:gsub("%[([^%]]+)%]%(([^%)]+)%)", "<font color='#7FB8FF'>%1</font>")
+	txt = txt:gsub("<(https?://[^>]+)>", "<font color='#7FB8FF'>%1</font>")
+	txt = txt:gsub("%*%*([^\n%*]+)%*%*", "<b>%1</b>")
+	txt = txt:gsub("~~([^\n~]+)~~", "<strike>%1</strike>")
+	txt = txt:gsub("`([^`\n]+)`", "<font color='#E8B86D'>%1</font>")
+	txt = txt:gsub("%*([^\n%*]+)%*", "<i>%1</i>")
+
+	return txt
+end
+
+-- ==================== MARKDOWN TABLE HELPERS ====================
+
+local function stripEdgePipes(s)
+	s = s:gsub("^%s*|", "")
+	s = s:gsub("|%s*$", "")
+	return s
+end
+
+local function splitCells(s)
+	local cells = {}
+	local current = ""
+	for i = 1, #s do
+		local ch = s:sub(i, i)
+		if ch == "|" then
+			table.insert(cells, current)
+			current = ""
+		else
+			current = current .. ch
+		end
+	end
+	table.insert(cells, current)
+	for i = 1, #cells do
+		cells[i] = cells[i]:gsub("^%s+", ""):gsub("%s+$", "")
+	end
+	return cells
+end
+
+-- ==================== MARKDOWN BLOCK PARSER ====================
+
+local function isTableSeparator(line)
+	if not line:match("^%s*|") then return false end
+	local s = stripEdgePipes(line)
+	local cells = splitCells(s)
+	if #cells == 0 then return false end
+	local valid = 0
+	for _, t in ipairs(cells) do
+		if t ~= "" then
+			if not t:match("^:?-+:?$") then return false end
+			valid = valid + 1
+		end
+	end
+	return valid > 0
+end
+
+local function parseBlocks(text)
+	local blocks = {}
+	text = text:gsub("\r\n", "\n")
+	local lines = {}
+	for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+		table.insert(lines, line)
+	end
+	while #lines > 0 and lines[#lines] == "" do table.remove(lines) end
+
+	local n = #lines
+	local i = 1
+
+	local function isCodeFence(l) return l:match("^```") ~= nil end
+	local function isHR(l) return l:match("^%s*[-%*_][%-%*_][%-%*_]+%s*$") ~= nil end
+	local function isTableRow(l) return l:match("^%s*|") ~= nil end
+	local function isQuote(l) return l:match("^%s*>") ~= nil end
+	local function isBullet(l) return l:match("^%s*[%-%*%+]%s") ~= nil end
+	local function isNumber(l) return l:match("^%s*%d+%.%s") ~= nil end
+	local function isList(l) return isBullet(l) or isNumber(l) end
+
+	local function tryParseTable(startIdx)
+		if startIdx + 1 > n then return nil end
+		if not isTableRow(lines[startIdx]) then return nil end
+		if not isTableSeparator(lines[startIdx + 1]) then return nil end
+		local tblLines = {}
+		local j = startIdx
+		while j <= n and isTableRow(lines[j]) do
+			table.insert(tblLines, lines[j])
+			j = j + 1
+		end
+		if #tblLines < 2 then return nil end
+		local header = splitCells(stripEdgePipes(tblLines[1]))
+		if #header == 0 then return nil end
+		local dataRows = {}
+		for k = 3, #tblLines do
+			table.insert(dataRows, splitCells(stripEdgePipes(tblLines[k])))
+		end
+		return { type = "table", header = header, rows = dataRows }, j
+	end
+
+	while i <= n do
+		local line = lines[i]
+		local consumed = false
+
+		if isCodeFence(line) then
+			local lang = line:match("^```(%S*)") or ""
+			local code = {}
+			i = i + 1
+			while i <= n and not isCodeFence(lines[i]) do
+				table.insert(code, lines[i])
+				i = i + 1
+			end
+			i = i + 1
+			table.insert(blocks, { type = "code", lang = lang, content = table.concat(code, "\n") })
+			consumed = true
+		elseif isHR(line) then
+			table.insert(blocks, { type = "hr" })
+			i = i + 1
+			consumed = true
+		else
+			local tbl, nextI = tryParseTable(i)
+			if tbl then
+				table.insert(blocks, tbl)
+				i = nextI
+				consumed = true
+			end
+		end
+
+		if not consumed then
+			if isQuote(line) then
+				local qLines = {}
+				while i <= n and isQuote(lines[i]) do
+					table.insert(qLines, lines[i]:gsub("^%s*>%s?", ""))
+					i = i + 1
+				end
+				table.insert(blocks, { type = "quote", content = table.concat(qLines, "\n") })
+			elseif isList(line) then
+				local items = {}
+				while i <= n and isList(lines[i]) do
+					local l = lines[i]
+					local indent = #(l:match("^%s*") or "")
+					local bullet = l:match("^%s*[%-%*%+]%s") ~= nil
+					local num = l:match("^%s*(%d+)%.%s")
+					local content
+					if bullet then
+						content = l:match("^%s*[%-%*%+]%s+(.*)$") or ""
+					else
+						content = l:match("^%s*%d+%.%s+(.*)$") or ""
+					end
+					local taskState = nil
+					local tm = content:match("^%[([ xX])%]%s*(.*)$")
+					if tm then
+						taskState = (tm:lower() == "x")
+						content = content:match("^%[[ xX]%]%s*(.*)$") or ""
+					end
+					table.insert(items, {
+						indent = indent,
+						marker = bullet and "bullet" or "number",
+						num = num,
+						content = content,
+						task = taskState
+					})
+					i = i + 1
+				end
+				table.insert(blocks, { type = "list", items = items })
+			elseif line:match("^%s*$") then
+				i = i + 1
+			else
+				local textLines = {}
+				while i <= n do
+					local l = lines[i]
+					if l:match("^%s*$") or isCodeFence(l) or isHR(l) or isQuote(l) or isList(l) then break end
+					local tb = tryParseTable(i)
+					if tb then break end
+					table.insert(textLines, l)
+					i = i + 1
+				end
+				if #textLines > 0 then
+					table.insert(blocks, { type = "text", content = table.concat(textLines, "\n") })
+				else
+					i = i + 1
+				end
+			end
+		end
+	end
+
+	return blocks
+end
+
+-- ==================== MARKDOWN UI BUILDERS ====================
+
+local function measureTextWidth(text, size, font)
+	if text == "" then return 0 end
+	local ok, sz = pcall(function()
+		return TextService:GetTextSize(text, size, font, Vector2.new(10000, 10000))
+	end)
+	if ok and sz then return sz.X end
+	return #text * 7
+end
+
+local function buildTable(parent, header, rows, layoutOrder)
+	local colCount = #header
+	for _, r in ipairs(rows) do
+		if #r > colCount then colCount = #r end
+	end
+	if colCount == 0 then return end
+
+	local FONT = Enum.Font.GothamMedium
+	local FONT_BOLD = Enum.Font.GothamBold
+	local TEXT_SIZE = 14
+	local CELL_PADDING = 20
+
+	local widths = {}
+	for i = 1, colCount do widths[i] = 40 end
+	local function update(col, txt)
+		if not txt or txt == "" then return end
+		local w = measureTextWidth(txt, TEXT_SIZE, FONT) + CELL_PADDING
+		if w > widths[col] then widths[col] = w end
+	end
+	for i, cell in ipairs(header) do update(i, cell) end
+	for _, row in ipairs(rows) do
+		for i, cell in ipairs(row) do update(i, cell) end
+	end
+
+	local totalW = 0
+	for i = 1, colCount do totalW = totalW + widths[i] end
+	if totalW <= 0 then totalW = 1 end
+
+	local frame = Instance.new("Frame")
+	frame.Name = "TableBlock"
+	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.new(1, 0, 0, 0)
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.LayoutOrder = layoutOrder
+	frame.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = frame
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(50, 50, 55)
+	stroke.Thickness = 1
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = frame
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 6)
+	pad.PaddingBottom = UDim.new(0, 6)
+	pad.PaddingLeft = UDim.new(0, 6)
+	pad.PaddingRight = UDim.new(0, 6)
+	pad.Parent = frame
+
+	local vLayout = Instance.new("UIListLayout")
+	vLayout.FillDirection = Enum.FillDirection.Vertical
+	vLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	vLayout.Padding = UDim.new(0, 0)
+	vLayout.Parent = frame
+
+	local rowOrder = 0
+	local function makeRow(cells, isHeader)
+		rowOrder = rowOrder + 1
+		local rowFrame = Instance.new("Frame")
+		rowFrame.BackgroundColor3 = isHeader and Color3.fromRGB(30, 30, 34) or Color3.fromRGB(0, 0, 0)
+		rowFrame.BackgroundTransparency = isHeader and 0 or 1
+		rowFrame.BorderSizePixel = 0
+		rowFrame.Size = UDim2.new(1, 0, 0, 26)
+		rowFrame.LayoutOrder = rowOrder
+		rowFrame.Parent = frame
+
+		local xScale = 0
+		for i = 1, colCount do
+			local text = cells[i] or ""
+			local wScale = widths[i] / totalW
+			local lbl = Instance.new("TextLabel")
+			lbl.BackgroundTransparency = 1
+			lbl.BorderSizePixel = 0
+			lbl.Position = UDim2.new(xScale, 0, 0, 0)
+			lbl.Size = UDim2.new(wScale, 0, 1, 0)
+			lbl.Font = isHeader and FONT_BOLD or FONT
+			lbl.TextSize = TEXT_SIZE
+			lbl.TextColor3 = isHeader and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(210, 210, 215)
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.TextYAlignment = Enum.TextYAlignment.Center
+			lbl.TextWrapped = false
+			lbl.RichText = true
+			lbl.Text = richText(text)
+			lbl.Parent = rowFrame
+
+			local cellPad = Instance.new("UIPadding")
+			cellPad.PaddingLeft = UDim.new(0, 6)
+			cellPad.PaddingRight = UDim.new(0, 6)
+			cellPad.Parent = lbl
+
+			xScale = xScale + wScale
+		end
+	end
+
+	makeRow(header, true)
+
+	local sep = Instance.new("Frame")
+	sep.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+	sep.BorderSizePixel = 0
+	sep.Size = UDim2.new(1, 0, 0, 1)
+	sep.LayoutOrder = rowOrder
+	sep.Parent = frame
+	rowOrder = rowOrder + 1
+
+	for _, row in ipairs(rows) do
+		makeRow(row, false)
+	end
+end
+
+local function buildQuote(parent, content, layoutOrder)
+	local frame = Instance.new("Frame")
+	frame.Name = "QuoteBlock"
+	frame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.new(1, 0, 0, 0)
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.LayoutOrder = layoutOrder
+	frame.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = frame
+
+	local bar = Instance.new("Frame")
+	bar.BackgroundColor3 = Color3.fromRGB(100, 140, 220)
+	bar.BorderSizePixel = 0
+	bar.Position = UDim2.new(0, 0, 0, 0)
+	bar.Size = UDim2.new(0, 3, 1, 0)
+	bar.Parent = frame
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 6)
+	pad.PaddingBottom = UDim.new(0, 6)
+	pad.PaddingLeft = UDim.new(0, 14)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = frame
+
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.new(1, 0, 0, 0)
+	lbl.AutomaticSize = Enum.AutomaticSize.Y
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 16
+	lbl.TextColor3 = Color3.fromRGB(180, 180, 190)
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextYAlignment = Enum.TextYAlignment.Top
+	lbl.TextWrapped = true
+	lbl.RichText = true
+	lbl.Text = richText(content)
+	lbl.Parent = frame
+end
+
+local function buildList(parent, items, layoutOrder)
+	local container = Instance.new("Frame")
+	container.Name = "ListBlock"
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.new(1, 0, 0, 0)
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.LayoutOrder = layoutOrder
+	container.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 2)
+	layout.Parent = container
+
+	local counters = {}
+	for idx, item in ipairs(items) do
+		local lvl = math.floor(item.indent / 2)
+		local prefix
+		if item.task ~= nil then
+			prefix = item.task and "[x] " or "[ ] "
+		elseif item.marker == "number" then
+			counters[lvl] = (counters[lvl] or 0) + 1
+			for k = lvl + 1, 12 do counters[k] = nil end
+			prefix = tostring(counters[lvl]) .. ". "
+		else
+			counters[lvl] = 0
+			prefix = "- "
+		end
+
+		local rowFrame = Instance.new("Frame")
+		rowFrame.BackgroundTransparency = 1
+		rowFrame.Size = UDim2.new(1, 0, 0, 0)
+		rowFrame.AutomaticSize = Enum.AutomaticSize.Y
+		rowFrame.LayoutOrder = idx
+		rowFrame.Parent = container
+
+		local indentPx = 12 + lvl * 16
+		local lbl = Instance.new("TextLabel")
+		lbl.BackgroundTransparency = 1
+		lbl.Position = UDim2.new(0, indentPx, 0, 0)
+		lbl.Size = UDim2.new(1, -indentPx, 0, 0)
+		lbl.AutomaticSize = Enum.AutomaticSize.Y
+		lbl.Font = Enum.Font.GothamMedium
+		lbl.TextSize = 16
+		lbl.TextColor3 = Color3.fromRGB(190, 190, 195)
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.TextYAlignment = Enum.TextYAlignment.Top
+		lbl.TextWrapped = true
+		lbl.RichText = true
+		lbl.Text = prefix .. richText(item.content)
+		lbl.Parent = rowFrame
+	end
+end
+
+-- ==================== MD UTILS ====================
+
+local function tryParseJSON(str)
+	if not str or type(str) ~= "string" then return nil end
+	local clean = str:gsub("```json", ""):gsub("```", "")
+	local s = clean:find("{", 1, true)
+	local e = clean:match(".*()}")
+	if not s or not e then return nil end
+	local ok, data = pcall(function() return HttpService:JSONDecode(clean:sub(s, e)) end)
+	if ok and type(data) == "table" then return data end
+	return nil
+end
+
+local function copy(text)
+	if isStudio then print("[AI] Cannot copy in Studio.")
+	elseif setclipboard then setclipboard(text)
+	elseif toclipboard then toclipboard(text) end
+end
+
+-- ==================== LAYOUT ====================
+
+local function relayout()
+	local sorted = {}
+	for _, c in ipairs(messagesList:GetChildren()) do
+		if c:IsA("Frame") and c:GetAttribute("isMessage") then table.insert(sorted, c) end
+	end
+	table.sort(sorted, function(a, b) return (a:GetAttribute("msgOrder") or 0) < (b:GetAttribute("msgOrder") or 0) end)
+	local y = 10
+	for _, c in ipairs(sorted) do
+		c.Position = UDim2.new(c.AnchorPoint.X, 0, 0, y)
+		y += c.AbsoluteSize.Y + 10
+	end
+	messagesList.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+end
+
+local function scheduleRelayout()
+	task.defer(relayout)
+	task.delay(0.1, relayout)
+	task.delay(0.4, relayout)
+end
+
+local function renderAssistantContent(Clone, Message)
+	local container = Clone.Message
+	local textTemplate = container.SysMessageText
+	local codeTemplate = container.CodeBlock
+	for _, c in ipairs(container:GetChildren()) do
+		if c ~= textTemplate and c ~= codeTemplate and c:IsA("GuiObject") then c:Destroy() end
+	end
+	textTemplate.Visible = false
+	codeTemplate.Visible = false
+
+	local blocks = parseBlocks(Message)
+	local order = 0
+
+	local function addTextBlock(txt)
+		local t = txt:gsub("^%s+", ""):gsub("%s+$", "")
+		if #t == 0 then return end
+		local lbl = textTemplate:Clone()
+		lbl.Name = "TextBlock"
+		lbl.Visible = true
+		lbl.LayoutOrder = order
+		lbl.Text = richText(t)
+		lbl.Parent = container
+		order = order + 1
+	end
+
+	for _, block in ipairs(blocks) do
+		if block.type == "text" then
+			addTextBlock(block.content)
+		elseif block.type == "code" then
+			local cb = codeTemplate:Clone()
+			cb.Name = "CodeBlockInstance"
+			cb.Visible = true
+			cb.LayoutOrder = order
+			cb.Parent = container
+			cb.CodeHeader.CodeLang.Text = (#block.lang > 0) and block.lang:lower() or "code"
+			cb.CodeBox.CodeText.Text = block.content
+			local btn = cb.CodeHeader.CodeCopyBtn
+			btn.MouseButton1Click:Connect(function()
+				copy(block.content)
+				btn.Text = "Copied!"
+				task.delay(1.2, function() if btn.Parent then btn.Text = "Copy" end end)
+			end)
+			order = order + 1
+		elseif block.type == "hr" then
+			local hr = Instance.new("Frame")
+			hr.Name = "HRBlock"
+			hr.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+			hr.BorderSizePixel = 0
+			hr.Size = UDim2.new(1, 0, 0, 1)
+			hr.LayoutOrder = order
+			hr.Parent = container
+			order = order + 1
+		elseif block.type == "quote" then
+			local ok, err = pcall(buildQuote, container, block.content, order)
+			if not ok then addTextBlock("> " .. block.content) end
+			order = order + 1
+		elseif block.type == "table" then
+			local ok, err = pcall(buildTable, container, block.header, block.rows, order)
+			if not ok then
+				local flat = {}
+				table.insert(flat, table.concat(block.header, " | "))
+				for _, r in ipairs(block.rows) do
+					table.insert(flat, table.concat(r, " | "))
+				end
+				addTextBlock(table.concat(flat, "\n"))
+			end
+			order = order + 1
+		elseif block.type == "list" then
+			local ok, err = pcall(buildList, container, block.items, order)
+			if not ok then
+				local flat = {}
+				for _, item in ipairs(block.items) do
+					local indentStr = string.rep("  ", math.floor(item.indent / 2))
+					local mark
+					if item.task ~= nil then
+						mark = item.task and "[x] " or "[ ] "
+					elseif item.marker == "number" then
+						mark = (item.num or "1") .. ". "
+					else
+						mark = "- "
+					end
+					table.insert(flat, indentStr .. mark .. item.content)
+				end
+				addTextBlock(table.concat(flat, "\n"))
+			end
+			order = order + 1
+		end
+	end
+end
+
+local function createMessage(IsUser, Message)
+	local Clone = IsUser and userTemplate:Clone() or sysTemplate:Clone()
+	Clone.Visible = true
+	Clone.Parent = messagesList
+	messageOrder += 1
+	Clone:SetAttribute("isMessage", true)
+	Clone:SetAttribute("msgOrder", messageOrder)
+	Clone:SetAttribute("rawText", Message)
+	if IsUser then
+		Clone.AnchorPoint = Vector2.new(1, 0)
+		Clone.Message.Text = richText(Message)
+	else
+		Clone.AnchorPoint = Vector2.new(0, 0)
+		renderAssistantContent(Clone, Message)
+		Clone.Buttons.Copy.MouseButton1Click:Connect(function()
+			copy(Clone:GetAttribute("rawText") or "")
+		end)
+	end
+	scheduleRelayout()
+	return Clone
+end
+
+local function setResponseStatus(Response, text)
+	for _, c in ipairs(Response.Message:GetChildren()) do
+		if c.Name == "TextBlock" then c.Text = text break end
+	end
+	scheduleRelayout()
+end
+
+-- ==================== API ====================
+
+local function callGroq(payload, temperature, maxTokens)
+	local Data = {
+		Url = GROQ_URL,
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json",
+			["Authorization"] = "Bearer " .. GROQ_API_KEY
+		},
+		Body = {
+			model = GROQ_MODEL,
+			messages = payload,
+			temperature = temperature or 0.7,
+			max_tokens = maxTokens or 1500,
+			top_p = 1,
+			stream = false
+		}
+	}
+	local Result
+	local ok, err = pcall(function()
+		if isStudio then
+			Result = game.ReplicatedStorage.HTTP:InvokeServer(Data)
+		else
+			if not http_func then error("No HTTP function available") end
+			Data.Body = HttpService:JSONEncode(Data.Body)
+			local raw = http_func(Data)
+			Result = HttpService:JSONDecode(raw.Body)
+		end
+	end)
+	if not ok then return nil, tostring(err) end
+	if Result and Result.error then return nil, tostring(Result.error.message or Result.error) end
+	if Result and Result.choices and Result.choices[1] and Result.choices[1].message then
+		return Result.choices[1].message.content, nil
+	end
+	return nil, "Empty API response"
+end
+
+-- ==================== MEMORY OPS ====================
+
+local function buildMemorySystemMessage()
+	if memory.summary == "" and #memory.facts == 0 then return nil end
+	local factsStr = #memory.facts > 0 and ("- " .. table.concat(memory.facts, "\n- ")) or "(none yet)"
+	local summaryStr = memory.summary ~= "" and memory.summary or "(no summary yet)"
+	local text = string.format(MEMORY_SYSTEM_TEMPLATE, summaryStr, factsStr)
+	return { role = "system", content = text }
+end
+
+local function compressHistory()
+	if #memory.recent <= COMPRESS_AT then return end
+	local toCompress = {}
+	for i = 1, #memory.recent - COMPRESS_KEEP do table.insert(toCompress, memory.recent[i]) end
+	local keep = {}
+	for i = #memory.recent - COMPRESS_KEEP + 1, #memory.recent do table.insert(keep, memory.recent[i]) end
+	local dialogText = {}
+	for _, m in ipairs(toCompress) do
+		local prefix = m.role == "user" and "USER: " or (m.role == "assistant" and "AI: " or (tostring(m.role):upper() .. ": "))
+		table.insert(dialogText, prefix .. tostring(m.content))
+	end
+	local payload = {
+		{ role = "system", content = COMPRESS_PROMPT },
+		{ role = "user", content = "PREVIOUS SUMMARY:\n" .. (memory.summary ~= "" and memory.summary or "(empty)") ..
+			"\n\nNEW DIALOGUE:\n" .. table.concat(dialogText, "\n") }
+	}
+	local answer = callGroq(payload, 0.2, 500)
+	if answer and answer ~= "" then
+		memory.summary = answer:gsub("^%s+", ""):gsub("%s+$", "")
+	end
+	memory.recent = keep
+	saveMemory()
+end
+
+local function extractFacts()
+	local chunk = {}
+	local from = math.max(1, #memory.recent - 6)
+	for i = from, #memory.recent do
+		table.insert(chunk, tostring(memory.recent[i].role):upper() .. ": " .. tostring(memory.recent[i].content))
+	end
+	if #chunk == 0 then return end
+	local payload = {
+		{ role = "system", content = MEMORY_EXTRACT_PROMPT },
+		{ role = "user", content = table.concat(chunk, "\n") }
+	}
+	local answer = callGroq(payload, 0.1, 250)
+	if not answer then return end
+	local parsed = tryParseJSON(answer)
+	if parsed and type(parsed.facts) == "table" then
+		local existing = {}
+		for _, f in ipairs(memory.facts) do existing[f:lower()] = true end
+		for _, f in ipairs(parsed.facts) do
+			if type(f) == "string" and #f > 2 and not existing[f:lower()] then
+				table.insert(memory.facts, f)
+				if #memory.facts > 40 then table.remove(memory.facts, 1) end
+			end
+		end
+		saveMemory()
+	end
+end
+
+local function appendExchange(userMsg, assistantMsg)
+	table.insert(memory.recent, { role = "user", content = userMsg })
+	table.insert(memory.recent, { role = "assistant", content = assistantMsg })
+	saveMemory()
+	task.spawn(function()
+		pcall(compressHistory)
+		pcall(extractFacts)
+	end)
+end
+
+-- ==================== BUILD PAYLOAD ====================
+
+local function buildPayload(extraSystem, useHistory)
+	local payload = { { role = "system", content = BASE_SYSTEM } }
+	local memSys = buildMemorySystemMessage()
+	if memSys then table.insert(payload, memSys) end
+	if extraSystem then table.insert(payload, { role = "system", content = extraSystem }) end
+	if useHistory ~= false then
+		for _, m in ipairs(memory.recent) do table.insert(payload, m) end
+	end
+	return payload
+end
+
+-- ==================== THINK ====================
+
+local function runThink(query, Response)
+	setResponseStatus(Response, "Analyzing the request...")
+	local routerPayload = buildPayload(THINK_ROUTER_PROMPT, false)
+	table.insert(routerPayload, { role = "user", content = query })
+
+	local routeStr, routeErr = callGroq(routerPayload, 0.1, 300)
+	if not routeStr then return "Router error: " .. tostring(routeErr) end
+	local route = tryParseJSON(routeStr) or { needs_search = false, search_query = "", plan = "" }
+
+	local searchContext = ""
+	local sourcesList = {}
+
+	if route.needs_search and route.search_query and route.search_query ~= "" then
+		setResponseStatus(Response, "Searching: " .. route.search_query)
+		local results = webSearch(route.search_query)
+		if #results > 0 then
+			local more = webSearch(query .. " details")
+			for _, r in ipairs(more) do
+				local dup = false
+				for _, existing in ipairs(results) do
+					if existing.url == r.url then dup = true break end
+				end
+				if not dup then table.insert(results, r) end
+				if #results >= 10 then break end
+			end
+		end
+		if #results > 0 then
+			searchContext = formatSearchResults(results, 8)
+			for i = 1, math.min(#results, 4) do
+				table.insert(sourcesList, string.format("[%d] %s - %s", i, results[i].title, results[i].url))
+			end
+			setResponseStatus(Response, string.format("Found %d sources, thinking deeply...", #results))
+		else
+			setResponseStatus(Response, "No web results, answering from knowledge...")
+		end
+	else
+		setResponseStatus(Response, "Thinking deeply...")
+	end
+
+	local answerPayload = buildPayload(THINK_ANSWER_PROMPT, false)
+	if searchContext ~= "" then
+		table.insert(answerPayload, {
+			role = "system",
+			content = 'Web search results for "' .. tostring(route.search_query) .. '":\n\n' .. searchContext
+		})
+	end
+	if route.plan and route.plan ~= "" then
+		table.insert(answerPayload, { role = "system", content = "Your plan: " .. tostring(route.plan) })
+	end
+	for _, m in ipairs(memory.recent) do table.insert(answerPayload, m) end
+	table.insert(answerPayload, { role = "user", content = query })
+
+	local answer, err = callGroq(answerPayload, 0.35, 4000)
+	if not answer then return "Think error: " .. tostring(err) end
+	local final = answer
+	if #sourcesList > 0 then
+		final = final .. "\n\n**Sources:**\n" .. table.concat(sourcesList, "\n")
+	end
+	return final
+end
+
+-- ==================== MEMORY COMMANDS ====================
+
+local function memoryReport()
+	local lines = {}
+	table.insert(lines, "**Memory**")
+	table.insert(lines, "Messages in session: " .. #memory.recent)
+	table.insert(lines, "File: `" .. MEMORY_FILE .. "` " .. (hasFileIO and "(persistence available)" or "(no writefile - session only)"))
+	if memory.summary ~= "" then table.insert(lines, "\n**Summary:**\n" .. memory.summary) end
+	if #memory.facts > 0 then table.insert(lines, "\n**Facts:**\n- " .. table.concat(memory.facts, "\n- ")) end
+	if #memory.recent > 0 then
+		table.insert(lines, "\n**Recent messages:**")
+		for i, m in ipairs(memory.recent) do
+			local role = m.role == "user" and "**User**" or (m.role == "assistant" and "**AI**" or "**sys**")
+			local text = tostring(m.content):gsub("\n", " ")
+			if #text > 120 then text = text:sub(1, 117) .. "..." end
+			table.insert(lines, string.format("%d. %s: %s", i, role, text))
+		end
+	end
+	return table.concat(lines, "\n")
+end
+
+local function forgetAll()
+	memory.summary = ""
+	memory.facts = {}
+	memory.recent = {}
+	if hasFileIO then pcall(function() if isfile(MEMORY_FILE) then delfile(MEMORY_FILE) end end) end
+	return "Memory fully cleared."
+end
+
+local function forgetLast()
+	if #memory.recent >= 2 then
+		table.remove(memory.recent)
+		table.remove(memory.recent)
+		saveMemory()
+		return "Removed last exchange."
+	end
+	return "Nothing to remove."
+end
+
+local function clearChat()
+	for _, c in ipairs(messagesList:GetChildren()) do
+		if c:IsA("Frame") and c:GetAttribute("isMessage") then c:Destroy() end
+	end
+	messageOrder = 0
+	messagesList.CanvasSize = UDim2.new(0, 0, 0, 68)
+	messagesList.CanvasPosition = Vector2.new(0, 0)
+end
+
+-- ==================== SEND ====================
+
+local function sendMessage()
+	if isGenerating then return end
+	local Prompt = box.Text
+	if Prompt == nil or Prompt == "" then return end
+	box.Text = ""
+
+	local lower = Prompt:lower()
+	local isChCmd = (lower:sub(1, 4) == "@ch ") or (lower == "@ch")
+	local isServerCmd = (lower:sub(1, 8) == "@server ") or (lower == "@server")
+	local isSearchCmd = (lower:sub(1, 8) == "@search ") or (lower == "@search")
+	local isThinkCmd = (lower:sub(1, 7) == "@think ") or (lower == "@think")
+	local isMemoryCmd = (lower == "@memory")
+	local isForgetCmd = (lower:sub(1, 7) == "@forget") or (lower == "@forget")
+	local isClearCmd = (lower == "@clear")
+	local isToolCmd = isChCmd or isServerCmd
+
+	if isClearCmd then clearChat() return end
+
+	if isMemoryCmd then
+		createMessage(true, Prompt)
+		local r = createMessage(false, memoryReport())
+		r:SetAttribute("rawText", memoryReport())
+		return
+	end
+	if isForgetCmd then
+		createMessage(true, Prompt)
+		local sub = lower:match("^@forget%s+(%S+)")
+		local r
+		if sub == "last" then r = forgetLast() else r = forgetAll() end
+		createMessage(false, r)
+		return
+	end
+
+	createMessage(true, Prompt)
+	isGenerating = true
+	local Response = createMessage(false, "Thinking...")
+
+	task.spawn(function()
+		local Dots = 3
+		while task.wait(.33) do
+			if not isGenerating then return end
+			Dots = (Dots % 3) + 1
+			setResponseStatus(Response, "Thinking" .. string.rep(".", Dots))
+		end
+	end)
+
+	task.spawn(function()
+		local finalDisplay, historyContent
+
+		if isThinkCmd then
+			local query = Prompt:sub(8):gsub("^%s+", "")
+			if query == "" then
+				isGenerating = false
+				setResponseStatus(Response, "Provide a query: `@think <what to think about>`")
+				return
+			end
+			local answer = runThink(query, Response)
+			isGenerating = false
+			finalDisplay = answer
+			historyContent = answer
+
+		elseif isSearchCmd then
+			local query = Prompt:sub(9):gsub("^%s+", "")
+			if query == "" then
+				isGenerating = false
+				setResponseStatus(Response, "Provide a query: `@search <what to search>`")
+				return
+			end
+			setResponseStatus(Response, "Searching the web: " .. query)
+			local results = webSearch(query)
+			if #results == 0 then
+				isGenerating = false
+				finalDisplay = "Nothing found for: `" .. query .. "`."
+				historyContent = finalDisplay
+			else
+				setResponseStatus(Response, string.format("Found %d results, processing...", #results))
+				local resultsText = formatSearchResults(results, 6)
+				local payload = buildPayload(SEARCH_PROMPT, true)
+				table.insert(payload, { role = "system", content = "Web search results for: \"" .. query .. "\"\n\n" .. resultsText })
+				table.insert(payload, { role = "user", content = query })
+				local answer, err = callGroq(payload, 0.4, 1500)
+				isGenerating = false
+				if not answer then
+					finalDisplay = "Search error: " .. tostring(err)
+				else
+					local sources = {}
+					for i = 1, math.min(#results, 3) do
+						table.insert(sources, string.format("[%d] %s - %s", i, results[i].title, results[i].url))
+					end
+					finalDisplay = answer .. "\n\n**Sources:**\n" .. table.concat(sources, "\n")
+				end
+				historyContent = finalDisplay
+			end
+
+		else
+			local extraSys
+			if isServerCmd then extraSys = TOOL_PROMPT_SERVER
+			elseif isChCmd then extraSys = TOOL_PROMPT_CH end
+
+			local payload = buildPayload(extraSys, true)
+			table.insert(payload, { role = "user", content = Prompt })
+
+			local answer, err = callGroq(payload, isToolCmd and 0.2 or 0.7, 1500)
+			isGenerating = false
+
+			local Msg = answer or ("Request error: " .. tostring(err))
+			local displayMsg = Msg
+			local historyMsg = Msg
+
+			if isToolCmd then
+				local parsed = tryParseJSON(Msg)
+				if parsed and type(parsed) == "table" then
+					local reply = parsed.reply
+					if type(reply) ~= "string" or reply == "" then reply = "Done." end
+					local results = {}
+					if type(parsed.actions) == "table" then
+						for _, action in ipairs(parsed.actions) do
+							local aok, amsg = executeAction(action, isServerCmd)
+							table.insert(results, (aok and "OK " or "FAIL ") .. amsg)
+						end
+					end
+					local final = reply
+					if #results > 0 then final = reply .. "\n\n" .. table.concat(results, "\n") end
+					displayMsg = final
+					historyMsg = reply
+				end
+			end
+			finalDisplay = displayMsg
+			historyContent = historyMsg
+		end
+
+		isGenerating = false
+		appendExchange(Prompt, historyContent)
+		Response:SetAttribute("rawText", finalDisplay)
+		renderAssistantContent(Response, finalDisplay)
+		scheduleRelayout()
+	end)
+end
+
+box.FocusLost:Connect(function(enterPressed)
+	if enterPressed then sendMessage() end
+end)
+
+-- ==================== INIT ====================
+
+task.spawn(function()
+	loadMemory()
+	if memory.summary ~= "" or #memory.facts > 0 or #memory.recent > 0 then
+		local welcome = "**Memory loaded.**"
+		if memory.summary ~= "" then welcome = welcome .. "\n- Saved summary available." end
+		if #memory.facts > 0 then welcome = welcome .. "\n- Facts about you: " .. #memory.facts end
+		if #memory.recent > 0 then welcome = welcome .. "\n- Session messages: " .. #memory.recent end
+		welcome = welcome .. "\n\nType `@memory` for details, `@forget` to clear, `@clear` to clear the chat window."
+		createMessage(false, welcome)
+	end
+end)
